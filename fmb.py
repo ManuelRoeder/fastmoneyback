@@ -270,16 +270,17 @@ def main(droppedFolder):
         header_str = add_to_text_stream(headline_str, "Antrag auf Abschlagszahlung für die Reise mit der Genehmigungsnummer " + genehmigungsnummer)
 
     sender_str = ""
-    name_2 = sender_data_table.iloc[0,1]
-    name_1 = sender_data_table.iloc[0, (sender_data_table.shape[1] - 1)]
-    name = name_1 + " " + name_2
-    tel = sender_data_table.iloc[6,1]
-    mail = sender_data_table.iloc[6,2]
-    personalnummer = sender_data_table.iloc[6,3]
-    sender_str = add_to_text_stream(sender_str, name)
-    sender_str = add_to_text_stream(sender_str, "Pers.Nr.: " + personalnummer)
-    sender_str = add_to_text_stream(sender_str, "Tel: " + tel)
-    sender_str = add_to_text_stream(sender_str, "Mail: " + mail)
+    if sender_data_table is not None:
+        name_2 = sender_data_table.iloc[0,1]
+        name_1 = sender_data_table.iloc[0, (sender_data_table.shape[1] - 1)]
+        name = name_1 + " " + name_2
+        tel = sender_data_table.iloc[6,1]
+        mail = sender_data_table.iloc[6,2]
+        personalnummer = sender_data_table.iloc[6,3]
+        sender_str = add_to_text_stream(sender_str, name)
+        sender_str = add_to_text_stream(sender_str, "Pers.Nr.: " + personalnummer)
+        sender_str = add_to_text_stream(sender_str, "Tel: " + tel)
+        sender_str = add_to_text_stream(sender_str, "Mail: " + mail)
         
     if buchungsdaten_table1 is not None:
         kapitel = buchungsdaten_table1.iloc[1,0]
