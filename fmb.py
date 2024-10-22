@@ -1,3 +1,4 @@
+import PIL.Image
 from pypdf import PdfReader, PdfWriter
 import tabula
 #from tabulate import tabulate
@@ -59,6 +60,20 @@ def check_folder(dropped_folder):
     return os.path.join(dropped_folder, antragsfile[0])
 
 
+def convert_pngs(png_files_to_convert, droppedFolder):
+    for png in png_files_to_convert:
+        # do the conversion
+        in_file = os.path.join(droppedFolder, png)
+        out_fn = png.replace("png", "pdf")
+        merged_png_path = os.path.join(droppedFolder, out_fn)
+        if not os.path.exists(merged_png_path):
+            # convert
+            im = Image.open(in_file)
+            image_rgb = im.convert("RGB")
+            image_rgb.save(merged_png_path, "PDF", quality=100)
+            print("Coverted image: " + png + " to " + merged_png_path)
+        
+
 # Append other PDFs to the initial PDF
 def append_pdfs(base_pdf_path, pdfs_to_append, folder, antragsnummer):
     pdf_writer = PdfWriter()
@@ -81,7 +96,7 @@ def append_pdfs(base_pdf_path, pdfs_to_append, folder, antragsnummer):
         pdf_writer.write(out_pdf)
 
     print(f"PDFs have been merged into {merged_pdf_path}")
-
+    
 
 def add_to_text_stream(stream, new_text):
     return stream + new_text + "\n"
@@ -138,7 +153,7 @@ def main(droppedFolder):
     path_to_antrag = check_folder(droppedFolder)
     
     # parse doc
-    tables = tabula.read_pdf(path_to_antrag, stream=True, pages="all", multiple_tables=True)
+    tables = tabula.read_pdf(path_to_antrag, stream=True, lattice=True, pages="all", multiple_tables=True)
     if tables is None:
         print("Could not parse Antrag")
         sys.exit()
@@ -255,23 +270,22 @@ def main(droppedFolder):
         header_str = add_to_text_stream(headline_str, "Antrag auf Abschlagszahlung für die Reise mit der Genehmigungsnummer " + genehmigungsnummer)
 
     sender_str = ""
-    if sender_data_table is not None:
-        name_2 = sender_data_table.iloc[0,0].strip("Name ")
-        name_1 = sender_data_table.iloc[0,3]
-        name = name_1 + " " + name_2
-        tel = sender_data_table.iloc[7,1]
-        mail = sender_data_table.iloc[7,2]
-        personalnummer = sender_data_table.iloc[7,3]
-        sender_str = add_to_text_stream(sender_str, name)
-        sender_str = add_to_text_stream(sender_str, "Pers.Nr.: " + personalnummer)
-        sender_str = add_to_text_stream(sender_str, "Tel: " + tel)
-        sender_str = add_to_text_stream(sender_str, "Mail: " + mail)
+    name_2 = sender_data_table.iloc[0,1]
+    name_1 = sender_data_table.iloc[0, (sender_data_table.shape[1] - 1)]
+    name = name_1 + " " + name_2
+    tel = sender_data_table.iloc[6,1]
+    mail = sender_data_table.iloc[6,2]
+    personalnummer = sender_data_table.iloc[6,3]
+    sender_str = add_to_text_stream(sender_str, name)
+    sender_str = add_to_text_stream(sender_str, "Pers.Nr.: " + personalnummer)
+    sender_str = add_to_text_stream(sender_str, "Tel: " + tel)
+    sender_str = add_to_text_stream(sender_str, "Mail: " + mail)
         
     if buchungsdaten_table1 is not None:
-        kapitel = buchungsdaten_table1.iloc[1,0].split(" ")[0]
-        titel = buchungsdaten_table1.iloc[1,0].split(" ")[1]
-        ebene1 = buchungsdaten_table1.iloc[1,4]
-        ebene2 = buchungsdaten_table1.iloc[1,5]
+        kapitel = buchungsdaten_table1.iloc[1,0]
+        titel = buchungsdaten_table1.iloc[1,1]
+        ebene1 = buchungsdaten_table1.iloc[1,5]
+        ebene2 = buchungsdaten_table1.iloc[1,6]
         
     if buchungsdaten_table2 is not None:
         kostenart = buchungsdaten_table2.iloc[1,2]
@@ -284,7 +298,7 @@ def main(droppedFolder):
             # kostenindex
             START_INDEX_Y_TAG = 0
             START_INDEX_Y_KOSTEN = find_kosten_index(hauptreisedaten_table)
-            rolling_index = 5
+            rolling_index = 3
             reisetage = list()
             while rolling_index < 100:
                 try:
@@ -316,7 +330,7 @@ def main(droppedFolder):
             print("Belege-Check Verkehrsmittel")
             # kostenindex
             START_INDEX_Y_TAG = 0
-            START_INDEX_Y_KOSTEN = 7
+            START_INDEX_Y_KOSTEN = 8
             rolling_index = 1
             verkehrsmittel = list()
             kosten_verkehrsmittel = 0.0
@@ -324,18 +338,22 @@ def main(droppedFolder):
             while rolling_index < 100:
                 try:
                     if not verkehrsmittel_table.isnull().iloc[rolling_index,START_INDEX_Y_TAG] and not verkehrsmittel_table.isnull().iloc[rolling_index,START_INDEX_Y_KOSTEN] and has_numbers(verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_KOSTEN]):
-                        tag = verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_TAG]
+                        tag = verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_TAG] + " " + verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_TAG + 1]
+                        tag = tag.replace('\r', ' ')
                         if "PKW" in tag:
                             km = float(verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_KOSTEN - 1].strip(" km"))
                             if "triftig" in tag:
                                 pkw_triftig = True 
                                 kosten = str(km * PKW_MULT_TRIFTIG) + " EUR (triftiger Grund)"
+                                kosten = kosten.replace('\r', ' ')
                                 print("Triftige PKW-Fahrt entdeckt, Kosten berechnet: " + str(km) + "(KM) * " + str(PKW_MULT_TRIFTIG) + " = " + str(kosten))
                             else:
                                 kosten = str(km * PKW_MULTI) + " EUR"
+                                kosten = kosten.replace('\r', ' ')
                                 print("PKW-Fahrt entdeckt, Kosten berechnet: " + str(km) + "(KM) * " + str(PKW_MULTI) + " = " + str(kosten))
                         else:    
                             kosten = verkehrsmittel_table.iloc[rolling_index, START_INDEX_Y_KOSTEN]
+                            kosten = kosten.replace('\r', ' ')
                         verkehrsmittel.append((tag, str(kosten)))
                     rolling_index = rolling_index + 1
                 except IndexError:
@@ -346,7 +364,7 @@ def main(droppedFolder):
             #print("Belege-Check Verkehrsmittel")
             # kostenindex
             START_INDEX_Y_TAG_2 = 0
-            START_INDEX_Y_KOSTEN_2 = (verkehrsmittel_table_2.shape[1] - 1)
+            START_INDEX_Y_KOSTEN_2 = (verkehrsmittel_table_2.shape[1] - 2)
             rolling_index = 0
             #verkehrsmittel = list()
             #kosten_verkehrsmittel = 0.0
@@ -355,37 +373,41 @@ def main(droppedFolder):
                 try:
                     if not verkehrsmittel_table_2.isnull().iloc[rolling_index,START_INDEX_Y_TAG_2] and not verkehrsmittel_table_2.isnull().iloc[rolling_index,START_INDEX_Y_KOSTEN_2] and has_numbers(verkehrsmittel_table_2.iloc[rolling_index, START_INDEX_Y_KOSTEN_2]):
                         tag = verkehrsmittel_table_2.iloc[rolling_index, START_INDEX_Y_TAG_2] + " " + verkehrsmittel_table_2.iloc[rolling_index, START_INDEX_Y_TAG_2+1]
+                        tag = tag.replace('\r', ' ')
                         if "PKW" in tag:
                             km = float(verkehrsmittel_table_2.iloc[rolling_index, START_INDEX_Y_KOSTEN_2 - 1].strip(" km"))
                             if "triftig" in tag:
                                 pkw_triftig = True 
                                 kosten = str(km * PKW_MULT_TRIFTIG) + " EUR (triftiger Grund)"
+                                kosten = kosten.replace('\r', ' ')
                                 print("Triftige PKW-Fahrt entdeckt, Kosten berechnet: " + str(km) + "(KM) * " + str(PKW_MULT_TRIFTIG) + " = " + str(kosten))
                             else:
                                 kosten = str(km * PKW_MULTI) + " EUR"
+                                kosten = kosten.replace('\r', ' ')
                                 print("PKW-Fahrt entdeckt, Kosten berechnet: " + str(km) + "(KM) * " + str(PKW_MULTI) + " = " + str(kosten))
                         else:    
                             kosten = verkehrsmittel_table_2.iloc[rolling_index, START_INDEX_Y_KOSTEN_2]
+                            kosten = kosten.replace('\r', ' ')
                         verkehrsmittel.append((tag, str(kosten)))
                     rolling_index = rolling_index + 1
                 except IndexError:
                     print("IndexError at verkehrsmittel_table_2")
                     break
             
-            print("Beleg vorhanden für Verkehrsmittel? (leer für JA, n für NEIN)")
-            idx_to_rem = list()
-            for idx, tag in enumerate(verkehrsmittel):
-                user_input = input("DATUM: " + tag[0] + " | KOSTEN: " + tag[1] + "|  ")
-                if user_input != "":
-                    idx_to_rem.append(idx)
-                else:
-                    if "PKW" in tag[0]:
-                        pkw_fahrt = True
-                        pkw_kosten = pkw_kosten + float(get_number(tag[1])[0])
-                    kosten_verkehrsmittel = kosten_verkehrsmittel + float(get_number(tag[1])[0])
-            
-            for index in sorted(idx_to_rem, reverse=True):
-                verkehrsmittel.pop(index)
+        print("Beleg vorhanden für Verkehrsmittel? (leer für JA, n für NEIN)")
+        idx_to_rem = list()
+        for idx, tag in enumerate(verkehrsmittel):
+            user_input = input("DATUM: " + tag[0] + " | KOSTEN: " + tag[1] + "|  ")
+            if user_input != "":
+                idx_to_rem.append(idx)
+            else:
+                if "PKW" in tag[0]:
+                    pkw_fahrt = True
+                    pkw_kosten = pkw_kosten + float(get_number(tag[1])[0])
+                kosten_verkehrsmittel = kosten_verkehrsmittel + float(get_number(tag[1])[0])
+        
+        for index in sorted(idx_to_rem, reverse=True):
+            verkehrsmittel.pop(index)
         
         
         if nebenkosten_table is not None:
@@ -451,8 +473,9 @@ def main(droppedFolder):
     greetings_str = add_to_text_stream(greetings_str, "Sehr geehrte Damen und Herren,")
 
     main_txt_str = ""
-    main_txt_str = add_to_text_stream(main_txt_str, "für meine " + reisezusammenfassung + " (GN-Nr." + genehmigungsnummer + ") stelle ich hiermit einen Antrag auf Abschlagszahlung zu " + percent_cashback_str
-                                      + " Prozent der angefügten Rechnungen und Belege.")
+    main_txt_str = add_to_text_stream(main_txt_str, "für meine " + reisezusammenfassung + " (GN-Nr." + genehmigungsnummer + ") stelle ich hiermit ")
+    main_txt_str = add_to_text_stream(main_txt_str,"einen Antrag auf Abschlagszahlung zu " + percent_cashback_str + " Prozent der angefügten Rechnungen und Belege.")
+                                      
     if pkw_fahrt:
         pkw_kosten_str = ("%.2f" % pkw_kosten)
         pkw_multi_str = ("%.0f" % (pkw_kosten/PKW_MULTI)) if not pkw_triftig else ("%.0f" % (pkw_kosten/PKW_MULT_TRIFTIG))
@@ -503,7 +526,7 @@ def main(droppedFolder):
     image_height_mm = image_height * 0.264583 * 0.4  # Convert pixels to mm (assuming 96 dpi)
 
     # Define the position where you want to place the image (bottom-left corner)
-    stamp_pos = (90, 220)
+    stamp_pos = (80, 200) # 
 
     # Insert the image into the PDF at the specified position
     pdf.image(image_rgb_path, x=stamp_pos[0], y=stamp_pos[1], w=image_width_mm, h=image_height_mm)
@@ -540,9 +563,15 @@ def main(droppedFolder):
     
     pdf.output(pdf_output_path)
     
+    #convert pngs to pdfs
+    png_files_to_convert = [f for f in os.listdir(droppedFolder) if f.endswith('.png')]
+    convert_pngs(png_files_to_convert, droppedFolder)
+    
     pdf_files_to_append = [f for f in os.listdir(droppedFolder) if f.endswith('.pdf')]
     # append antrag at the end
     append_pdfs(pdf_output_path, pdf_files_to_append, droppedFolder, genehmigungsnummer)
+    
+
     
     # cleanup
     clean_output_folder()
